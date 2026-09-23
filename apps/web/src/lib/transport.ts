@@ -23,7 +23,7 @@ const RUN_TIMEOUT_MS = 110_000;
 export class Transport {
   private readonly pending = new Set<string>();
 
-  constructor(private readonly send: FetchTransport = fetch) {}
+  constructor(private readonly send: FetchTransport = (input, init) => globalThis.fetch(input, init)) {}
 
   async json<T>(
     method: "GET" | "POST" | "PATCH",
