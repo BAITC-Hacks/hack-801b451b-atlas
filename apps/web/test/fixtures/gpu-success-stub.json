@@ -1,0 +1,6 @@
+{
+  "testOnly": true,
+  "label": "Transport contract stub; never evidence of executed GPU inference",
+  "runtime": "brev_gpu",
+  "status": "success"
+}
