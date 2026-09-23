@@ -5,6 +5,8 @@ import { DatasetInputSchema, type DatasetSummary, type Run } from "@atlas/contra
 import { useLocale, type Locale } from "@/components/locale-provider";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
+import { orderRunLines } from "@/lib/priority";
+import { preflightSalesCsv, type CsvIssue, type CsvPreflight } from "@/lib/sales-csv";
 
 const RUN_KEY = "atlas-run-id";
 const DEMO_DATASET_LABEL = "Synthetic 24-month replenishment demo v4";
@@ -51,6 +53,11 @@ export function LiveWorkbench() {
   const [categoryId, setCategoryId] = useState("");
   const [run, setRun] = useState<Run | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvPreflight, setCsvPreflight] = useState<CsvPreflight | null>(null);
+  const [csvChecking, setCsvChecking] = useState(false);
+  const csvSelection = useRef(0);
+  const [highFirst, setHighFirst] = useState(false);
   const [privacyConfirmed, setPrivacyConfirmed] = useState(false);
   const [busy, setBusy] = useState<"load" | "import" | "run" | "edit" | "approve" | "export" | "refresh" | null>("load");
   const [error, setError] = useState<unknown>(null);
@@ -97,11 +104,25 @@ export function LiveWorkbench() {
   }, []);
 
   const dataset = datasets.find(item => item.id === datasetId) ?? null;
-  const supplierGroups = useMemo(() => {
-    const groups = new Map<string, Run["lines"]>();
-    for (const line of run?.lines ?? []) groups.set(line.supplierId, [...(groups.get(line.supplierId) ?? []), line]);
-    return [...groups.values()];
-  }, [run]);
+  const visibleLines = useMemo(() => orderRunLines(run?.lines ?? [], highFirst), [run, highFirst]);
+
+  async function checkCsv(selected: File | null) {
+    const selection = ++csvSelection.current;
+    setCsvFile(selected); setCsvPreflight(null); setCsvChecking(!!selected);
+    if (!selected) return;
+    try {
+      const result = preflightSalesCsv(await selected.text());
+      if (selection === csvSelection.current) setCsvPreflight(result);
+    } catch {
+      if (selection === csvSelection.current) setCsvPreflight({dataRows: 0, issues: [{code: "malformedCsv", row: 1}]});
+    } finally { if (selection === csvSelection.current) setCsvChecking(false); }
+  }
+
+  function csvIssueText(issue: CsvIssue) {
+    const column = issue.column ? ` · ${issue.column}` : "";
+    const firstRow = issue.firstRow === undefined ? "" : ` · ${m.dataset.csvFirstRow} ${issue.firstRow}`;
+    return `${m.dataset.csvRow} ${issue.row}: ${m.dataset.csvIssues[issue.code]}${column}${firstRow}`;
+  }
 
   async function importDataset() {
     if (!file || !privacyConfirmed || busy) return;
@@ -219,13 +240,24 @@ export function LiveWorkbench() {
             <Button type="button" variant="outline" disabled={!file || !privacyConfirmed || busy !== null} onClick={() => void importDataset()}>{busy === "import" ? m.common.loading : m.dataset.import}</Button>
             <Button type="button" disabled={!dataset || !warehouseId || busy !== null} onClick={() => void calculate()}>{busy === "run" ? m.run.loading : m.run.start}</Button>
           </div>
+          <div className="space-y-2 border-t border-line pt-4">
+            <h3 className="text-sm font-semibold">{m.dataset.csvTitle}</h3>
+            <p className="text-xs text-muted">{m.dataset.csvHelp}</p>
+            <label className="block max-w-md text-xs font-semibold text-muted">{m.dataset.csvFile}<input type="file" accept=".csv,text/csv" onChange={event => void checkCsv(event.target.files?.[0] ?? null)} className="mt-1.5 block w-full text-xs font-normal" /></label>
+            {csvChecking && <p role="status" className="text-xs text-muted">{m.dataset.csvChecking}</p>}
+            {csvFile && csvPreflight && <div role="status" className="text-xs">
+              <p className={csvPreflight.issues.length ? "font-semibold text-warning" : "font-semibold text-emerald-800"}>{csvPreflight.issues.length ? m.dataset.csvBlocked : `${m.dataset.csvValid} · ${csvPreflight.dataRows} ${m.dataset.csvRows}`}</p>
+              {csvPreflight.issues.length > 0 && <ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-warning">{csvPreflight.issues.map((issue, index) => <li key={`${issue.row}-${issue.code}-${index}`}>{csvIssueText(issue)}</li>)}</ul>}
+            </div>}
+          </div>
         </div>
         <p className="flex flex-wrap gap-x-8 gap-y-2 border-t border-line bg-[#fafbf9] px-5 py-3 text-xs text-muted"><span>{m.common.source}: {dataset ? `${dataset.label} · ${dataset.kind === "synthetic" ? m.dataset.synthetic : m.dataset.imported}` : m.common.unavailable}</span><span>{m.common.asOf}: {dataset?.asOf ?? m.common.unavailable}</span><span>{m.common.status}: {run ? (run.status === "approved" ? (run.mode === "degraded" ? m.run.approvedDegraded : m.approval.approved) : run.mode === "degraded" ? m.run.degraded : m.run.success) : m.run.empty}</span></p>
       </section>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
         <section className="min-w-0 overflow-hidden rounded-lg border border-line bg-white" aria-labelledby="orders-heading"><div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4"><h2 id="orders-heading" className="font-semibold">{m.orders.title}</h2><div className="flex gap-2"><Button type="button" disabled={!run || busy !== null} onClick={() => void refreshRun()} variant="outline" size="small">{m.run.refresh}</Button><Button type="button" disabled={run?.status !== "approved" || busy !== null} onClick={() => void download()} variant="outline" size="small">{busy === "export" ? m.common.loading : m.orders.export}</Button></div></div>
           {run && <p className="border-b border-line px-5 py-2 text-xs text-muted">{m.run.revision}: {run.revision} · {m.common.asOf}: {run.asOf} · {run.status === "approved" ? m.approval.approved : m.approval.pending}</p>}
-          <div className="overflow-x-auto"><table className="w-full min-w-[800px] border-collapse text-left text-sm"><thead className="bg-[#fafbf9] text-xs text-muted"><tr><th className="px-4 py-3">{m.orders.supplier}</th><th className="px-4 py-3">{m.orders.sku}</th><th className="px-4 py-3">{m.orders.product}</th><th className="px-4 py-3">{m.orders.unit}</th><th className="px-4 py-3 text-right">{m.orders.recommended}</th><th className="px-4 py-3 text-right">{m.orders.final}</th><th className="px-4 py-3">{m.orders.urgency}</th><th className="px-4 py-3">{m.approval.edit}</th></tr></thead><tbody>{supplierGroups.flatMap(group => group.map((line, index) => <tr key={line.sku} className="border-t border-line align-top"><td className="px-4 py-3">{index === 0 ? line.supplierName : ""}</td><td className="px-4 py-3 font-mono text-xs">{line.sku}</td><td className="px-4 py-3"><p>{line.name}</p><p className="mt-1 text-xs leading-5 text-muted">{m.orders.rationale}: {number(line.metrics.baseDaily, locale, 2)} × {number(line.metrics.seasonFactor, locale, 2)} × {number(line.metrics.trendFactor, locale, 2)} × {number(1 + line.metrics.plannedGrowthPct / 100, locale, 2)} × {line.metrics.horizonDays} − {line.metrics.stock} − {line.metrics.eligibleInbound}</p></td><td className="px-4 py-3">{line.unit}</td><td className="px-4 py-3 text-right tabular-nums">{number(line.recommendedQty, locale)}</td><td className="px-4 py-3 text-right tabular-nums">{number(line.finalQty, locale)}</td><td className="px-4 py-3">{m.orders[line.urgency]}</td><td className="px-4 py-3"><Button type="button" size="small" variant="outline" disabled={run?.status !== "draft" || busy !== null} onClick={() => startEdit(line)}>{m.approval.edit}</Button></td></tr>))}</tbody></table>
+          <div className="flex flex-wrap items-center gap-3 border-b border-line px-5 py-3 text-xs"><label className="font-semibold text-muted">{m.orders.sortLabel}<select value={highFirst ? "priority" : "supplier"} onChange={event => setHighFirst(event.target.value === "priority")} className="ml-2 rounded border border-line bg-white px-2 py-1 font-normal text-ink"><option value="supplier">{m.orders.sortSupplier}</option><option value="priority">{m.orders.sortPriority}</option></select></label><span className="text-muted">{m.orders.priorityHelp}</span></div>
+          <div className="overflow-x-auto"><table className="w-full min-w-[800px] border-collapse text-left text-sm"><thead className="bg-[#fafbf9] text-xs text-muted"><tr><th className="px-4 py-3">{m.orders.supplier}</th><th className="px-4 py-3">{m.orders.sku}</th><th className="px-4 py-3">{m.orders.product}</th><th className="px-4 py-3">{m.orders.unit}</th><th className="px-4 py-3 text-right">{m.orders.recommended}</th><th className="px-4 py-3 text-right">{m.orders.final}</th><th className="px-4 py-3">{m.orders.urgency}</th><th className="px-4 py-3">{m.approval.edit}</th></tr></thead><tbody>{visibleLines.map((line, index) => <tr key={line.sku} className="border-t border-line align-top"><td className="px-4 py-3">{highFirst || index === 0 || visibleLines[index - 1].supplierId !== line.supplierId ? line.supplierName : ""}</td><td className="px-4 py-3 font-mono text-xs">{line.sku}</td><td className="px-4 py-3"><p>{line.name}</p><p className="mt-1 text-xs leading-5 text-muted">{m.orders.rationale}: {number(line.metrics.baseDaily, locale, 2)} × {number(line.metrics.seasonFactor, locale, 2)} × {number(line.metrics.trendFactor, locale, 2)} × {number(1 + line.metrics.plannedGrowthPct / 100, locale, 2)} × {line.metrics.horizonDays} − {line.metrics.stock} − {line.metrics.eligibleInbound}</p></td><td className="px-4 py-3">{line.unit}</td><td className="px-4 py-3 text-right tabular-nums">{number(line.recommendedQty, locale)}</td><td className="px-4 py-3 text-right tabular-nums">{number(line.finalQty, locale)}</td><td className="px-4 py-3"><span className={line.urgency === "high" ? "rounded bg-red-50 px-2 py-1 font-semibold text-red-800" : line.urgency === "normal" ? "rounded bg-amber-50 px-2 py-1 font-semibold text-amber-800" : "rounded bg-slate-100 px-2 py-1 text-slate-700"}>{m.orders[line.urgency]}</span><p className="mt-2 text-xs leading-5 text-muted">{m.orders.prioritySignal}: {m.orders.stock} {number(line.metrics.stock, locale)} + {m.orders.inbound} {number(line.metrics.eligibleInbound, locale)} / {m.orders.target} {number(line.metrics.targetUnits, locale)}</p>{line.warnings.length > 0 && <p className="mt-1 text-xs leading-5 text-warning">{line.warnings.map(warning => warningText(warning.code, m)).join(" · ")}</p>}</td><td className="px-4 py-3"><Button type="button" size="small" variant="outline" disabled={run?.status !== "draft" || busy !== null} onClick={() => startEdit(line)}>{m.approval.edit}</Button></td></tr>)}</tbody></table>
             {(!run || run.lines.length === 0) && <div className="flex min-h-52 flex-col items-center justify-center gap-2 border-t border-line px-6 py-8 text-center"><DatabaseIcon /><p className="font-medium">{run ? m.orders.noRows : m.run.empty}</p><p className="max-w-sm text-sm text-muted">{run ? m.orders.zeroOrder : m.run.emptyHelp}</p></div>}
           </div>
           {editingLine && run?.status === "draft" && <form className="grid gap-3 border-t border-line bg-canvas px-5 py-4 sm:grid-cols-[140px_minmax(0,1fr)_auto] sm:items-end" onSubmit={event => { event.preventDefault(); void saveEdit(); }}>
