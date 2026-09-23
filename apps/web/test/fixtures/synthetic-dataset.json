@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1",
+  "label": "Synthetic electrical supplies test snapshot",
+  "kind": "synthetic",
+  "currency": "KZT",
+  "historyStart": "2026-01-01",
+  "asOf": "2026-04-01",
+  "privacyConfirmed": true,
+  "sources": {
+    "sales": "synthetic test fixture",
+    "stock": "synthetic test fixture",
+    "stockouts": "synthetic test fixture",
+    "suppliers": "synthetic test fixture",
+    "materialStatement": "synthetic test fixture",
+    "inbound": "synthetic test fixture",
+    "categories": "synthetic test fixture",
+    "growth": "synthetic test fixture"
+  },
+  "warehouses": [{ "id": "wh-1", "name": "Test warehouse" }],
+  "suppliers": [{ "id": "sup-1", "name": "Test supplier", "leadTimeDays": 7 }],
+  "categories": [{ "id": "cat-1", "name": "Test category", "reviewDays": 7, "safetyDays": 2, "plannedGrowthPct": 5 }],
+  "items": [{ "sku": "sku-1", "name": "Test cable", "unit": "m", "categoryId": "cat-1", "supplierId": "sup-1" }],
+  "sales": [{ "id": "sale-1", "date": "2026-03-10", "sku": "sku-1", "warehouseId": "wh-1", "quantity": 3, "customerToken": "anon_0123456789abcdef", "unitPrice": 100 }],
+  "stock": [{ "date": "2026-04-01", "sku": "sku-1", "warehouseId": "wh-1", "quantity": 2 }],
+  "stockouts": [],
+  "inbound": []
+}

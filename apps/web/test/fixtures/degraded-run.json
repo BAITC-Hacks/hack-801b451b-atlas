@@ -1,0 +1,20 @@
+{
+  "run": {
+    "id": "run-1", "datasetId": "ds-1", "datasetHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "warehouseId": "wh-1", "categoryId": null, "asOf": "2026-04-01", "algorithmVersion": "replenishment-v1",
+    "status": "draft", "mode": "degraded", "revision": 1,
+    "lines": [],
+    "warnings": [{ "code": "GPU_WORKLOAD_UNAVAILABLE", "sku": null, "evidenceIds": [] }],
+    "ai": {
+      "mode": "degraded", "calculationId": "calc-1", "decision": null, "specialist": null, "candidates": [],
+      "runtimes": [
+        { "runtime": "openai", "status": "failed", "model": null, "attempts": 1, "elapsedMs": 1, "errorCode": "NETWORK", "skipReason": null },
+        { "runtime": "brev_gpu", "status": "failed", "model": null, "attempts": 0, "elapsedMs": 1, "errorCode": "GPU_UNAVAILABLE", "skipReason": null }
+      ],
+      "gpuEvidence": null, "trace": [],
+      "warnings": [{ "code": "GPU_WORKLOAD_UNAVAILABLE", "sku": null, "evidenceIds": [] }],
+      "eventActions": []
+    },
+    "approvedAt": null, "approvedBy": null, "createdAt": "2026-04-01T00:00:00.000Z"
+  }
+}
