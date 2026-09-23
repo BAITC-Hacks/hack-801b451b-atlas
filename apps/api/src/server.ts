@@ -6,5 +6,5 @@ const config = serverConfig();
 const db = createDb();
 const app = buildApp(db);
 app.addHook('onClose', async () => { await db.close(); });
-try { await app.listen({host: '0.0.0.0', port: config.port}); }
+try { await app.listen({host: config.host, port: config.port}); }
 catch (error) { console.error('API startup failed'); await app.close(); process.exitCode = 1; }

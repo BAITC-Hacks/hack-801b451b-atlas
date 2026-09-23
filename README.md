@@ -1,58 +1,92 @@
 # Atlas Replenishment
 
-**Status: planning only.** This repository currently contains the product specification, contract targets and PROMPT-1 execution plans. No application functionality, OpenAI or Brev GPU integration or run commands have been implemented or verified.
+Atlas is a local, bilingual workbench for preparing and reviewing supplier replenishment orders for the Elektokomplekt case. The application imports a normalized dataset, calculates deterministic recommendations, records an OpenAI agent's real tool execution, and stores editable drafts for human review and approval. It can export an approved order as CSV. Supplier sending and live 1C integration are out of scope.
 
-## Problem
+## Current status
 
-Purchasing managers consolidate warehouse data manually; seasonality, demand growth, stockouts and exceptional customer orders distort replenishment decisions. [Official case and checklist](docs/case.md).
+The non-GPU workflow is implemented and has passed a production-built local UI end-to-end run against the API and PostgreSQL. Run `00ebdb0c-9f42-4232-955e-111b0c9ea974` used a real OpenAI GPT-4.1 call and real backend tools; OpenAI succeeded and the Brev GPU runtime truthfully failed as unavailable. The browser run displayed six order lines, edited a line, rejected a stale revision with HTTP 409, acknowledged warnings, approved revision 3, downloaded CSV, then reloaded the same approved revision from the database. This verifies the local degraded workflow; it is not proof of GPU inference.
 
-## Solution
+The complete local checks recorded for this repository passed: frozen-lockfile install, recursive typecheck, recursive build, and package tests. The UI flow was exercised with `pnpm --filter @atlas/web e2e:local` using local Chrome. A clean API/web restart and rerun are recorded in the [non-GPU application verification](docs/review/application.md), which also lists package-level test counts and the remaining gates. Build and test commands are listed below.
 
-Planned: a small RU/EN workbench that calculates regular-demand replenishment, groups explainable drafts by supplier, lets the manager adjust and approve quantities, and exports an order CSV. Eight MUST features are defined in the [product specification](docs/product-spec.md). Calculation methodology and outlier rules are specified there; they are not yet implemented.
+## What the workflow does
 
-## Architecture
+The manager selects a dataset and warehouse, then runs the replenishment workflow. The backend persists an immutable dataset snapshot and uses an OpenAI Agents SDK agent to call scoped tools for demand inspection, event classification, and deterministic order calculation. The backend owns all quantities. The UI shows runtime and tool events, supplier-grouped recommendations, reasons, warnings, and GPU availability. The manager can edit quantities, acknowledge warnings, approve a current revision, and download the approved order as CSV. Approval is local and does not send an order to a supplier.
 
-Planned: Next.js → Fastify → PostgreSQL/Drizzle and `packages/ai` → OpenAI agent + deterministic backend tools + Brev-local NVIDIA GPU specialist over private HTTP. Docker Compose on Brev contains web/api/db/gpu-specialist; one API process; human approval remains in the backend. [HTTP contract](docs/api.md) · [AI/tool contract](docs/ai-contract.md) · [evidence map](docs/evaluation-map.md).
+The web application calls the same-origin `/api/v1` API through its server proxy. Fastify, PostgreSQL/Drizzle, shared Zod contracts, and the AI runner are in `apps/api`, `packages/db`, `packages/contracts`, and `packages/ai` respectively. Root Docker Compose starts the database, API, and web application. The Brev GPU specialist is an optional private service defined by `infra/brev/compose.gpu.yaml`.
 
-## Stack
+## Local setup
 
-Planned default: Next.js, TypeScript, Tailwind, shadcn/ui, Lucide; Fastify, Zod, Drizzle, PostgreSQL; OpenAI Agents SDK/API; NVIDIA Brev GPU compute; pnpm workspaces, Git, Codex, Docker Compose. Focused addition: one self-hosted GPU inference container—NIM if quickly feasible, otherwise llama.cpp CUDA with Qwen2.5-1.5B-Instruct GGUF Q4_K_M. [Addition rationale and ownership](docs/product-spec.md#stack-additionsdeviations). Dev tooling adds tsx with Node built-in tests. Intended paths: `apps/web`, `apps/api`, `packages/contracts`, `packages/db`, `packages/ai`.
+Prerequisites: Node.js 22.16.x, pnpm 11.15.1, Docker with Compose, and Google Chrome for the browser end-to-end command. A working OpenAI API key is required to generate a live agent draft. Keep the key server-side in `.env`; never put it in a `NEXT_PUBLIC_*` variable.
 
-## OpenAI role
+In PowerShell from the repository root:
 
-Planned primary agent: select/call scoped tools, observe classification and computed quantities, and return a validated evidence-linked review decision. It cannot approve or invent order quantities.
+```powershell
+Copy-Item .env.example .env
+```
 
-## NVIDIA role
+Edit `.env`: set `POSTGRES_PASSWORD` to a non-empty random alphanumeric value, set `OPENAI_API_KEY`, and set `OPENAI_MODEL=gpt-4.1-2025-04-14` for the model snapshot used in the recorded run. Other example values can remain as-is for the local degraded run. Do not commit `.env`.
 
-Resource correction: **$50 of Brev GPU compute credits**. Planned specialist: run model inference on the NVIDIA GPU in Brev to classify large-sale events from anonymous aggregate features; affect outlier retention/exclusion and review flags. Prefer NIM after a short feasibility check; the alternative is a small CUDA inference container, not a simulated output. No hosted NVIDIA inference entitlement is assumed. Any NGC credential required by the selected NIM is a separate deployment secret. No GPU, model inference or OpenAI call has been tested in START.
+Install dependencies and start the services:
 
-## Execution plans
+```powershell
+pnpm install --frozen-lockfile
+docker compose up --build -d
+docker compose exec -T api pnpm --filter @atlas/db migrate
+docker compose exec -T api pnpm --filter @atlas/db seed
+```
 
-[Global waves](docs/waves.md) · [Backend](docs/backend/orchestrator.md) · [Frontend](docs/frontend/orchestrator.md) · [AI](docs/ai/orchestrator.md) · [Final checklist](docs/final-checklist.md). Planning only; future task commands are not yet implemented. GPU deployment has one owner, Ivan, in `infra/brev/**`; application GPU HTTP communication belongs only to Ali in `packages/ai/**`.
+Open [http://localhost:3000](http://localhost:3000). The seed command is idempotent and creates a synthetic 24-month, six-SKU dataset. Use the workbench to select the dataset and warehouse and calculate a draft. To stop the local stack, run `docker compose down`; add `-v` only if you also intend to delete the local PostgreSQL data volume.
 
-## Setup placeholder
+To exercise the production-built browser workflow from Chrome, with the services running and an OpenAI key configured:
 
-TODO after implementation: exact prerequisites/versions and verified fresh-checkout install, environment, database migration, synthetic seed, start, health and build/test commands; Brev instance/driver checks, Compose GPU reservation, model download/cache/warmup, private GPU endpoint and SSH-forwarded UI. Check the actual instance quote against remaining $50 credits and document instance shutdown after demo. Do not treat this document as an executable setup guide yet.
+```powershell
+$env:ATLAS_BASE_URL = 'http://localhost:3000'
+pnpm --filter @atlas/web e2e:local
+```
 
-## Environment placeholder
+The script launches the locally installed Chrome browser in headless mode. If Chrome is installed in a non-standard location, set `ATLAS_CHROME_PATH` to its executable path before running the command. The flow creates and edits a draft, checks stale-revision rejection and approval, downloads CSV, and verifies persisted state after reload. It invokes the live OpenAI workflow and accepts the honest GPU-unavailable degraded state.
 
-Planned API variables: `DATABASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `GPU_SERVICE_URL` (default `http://gpu-specialist:8000`), `GPU_MODEL_ID`, `GPU_VERIFICATION_PATH` (read-only actual deployment evidence), `DEMO_OPERATOR`, `WEB_ORIGIN`; web proxy variable `API_INTERNAL_URL`. Deployment variables: `GPU_RUNTIME` (`nim` or `llama_cpp_cuda`), `GPU_IMAGE` pinned by digest, and selected model cache/revision configuration. `NGC_API_KEY` is conditional only if required for the chosen NIM download/image; never sent in inference requests. Ivan creates the validated `.env.example`; no NVIDIA hosted key/base URL is needed. Keep all secrets out of `NEXT_PUBLIC_*`. Access, image/model compatibility, latency and GPU execution remain unverified.
+## Build and verification
 
-## Demo/verification placeholder
+From the repository root:
 
-TODO: one seeded run with a real OpenAI API call and actual NVIDIA GPU inference on Brev, deterministic numeric fixtures, edit/approve/export/reload, OpenAI failure/GPU workload unavailability, RU/EN states and clean Compose reproduction. Record actual results and remaining failures. Planned demo uses realistic, visibly synthetic 24-month input; synthetic outputs cannot substitute for real inference. Record Brev instance/container/model identity, GPU-offload logs and inference-correlated compute evidence; show the GPU classification materially changes borderline retention/review. Stop the GPU service and verify honest degraded behavior. HTTP200 or GPU presence alone is insufficient.
+```powershell
+pnpm install --frozen-lockfile
+pnpm -r --if-present typecheck
+pnpm -r --if-present build
+```
 
-## RU/EN support
+The package test files can be run with the workspace `tsx` runner:
 
-Required but not built: RU/EN dictionaries, visible switcher, complete demo-critical loading/error/empty/success/approval copy and localized export explanations.
+```powershell
+pnpm --filter @atlas/contracts exec tsx --test test/contracts.test.ts
+pnpm --filter @atlas/db exec tsx --test test/persistence.test.ts
+pnpm --filter @atlas/ai exec tsx --test test/config.test.ts test/openai.test.ts test/gpu.test.ts test/run.test.ts
+pnpm --filter @atlas/api exec tsx --test test/import.test.ts test/calculation.test.ts test/runs.test.ts test/orders.test.ts
+pnpm --filter @atlas/web exec tsx --test test/transport.test.ts
+```
 
-## Known limitations placeholder
+The browser test requires the running Compose stack, seeded data, a valid OpenAI configuration, and local Chrome as described above.
 
-Known now: no V2/1C sample or accepted accounting import schema; CSV compatibility is proposed, not verified. OpenAI access, Brev GPU availability/quoted cost, model/image access and CUDA inference untested. Planned scope is a local single-operator demo, small whole-unit datasets, heuristic forecasts and no supplier sending. TODO: replace/extend with actual implemented limitations and measured checks before submission.
+## Runtime and deployment status
+
+OpenAI GPT-4.1 is the primary agent/control plane and was exercised successfully in the recorded local end-to-end run. GPU inference is not yet available or verified. Two Brev UI deployment attempts returned provider timeouts, a later Nebius request failed on provider VPC quota, and a GCP L4 instance is running for the final GPU phase. The application therefore reports a failed Brev GPU runtime, uses deterministic provisional handling for candidate events, and requires the manager to acknowledge warnings before approval. It does not claim or simulate GPU success. Brev deployment details and the evidence requirements for a GPU run are in [infra/brev/deployment.md](infra/brev/deployment.md).
+
+The private GPU adapter boundary remains in `packages/ai`; when an appropriately provisioned and verified Brev GPU service becomes available, it can be configured through the existing Compose overlay and `.env` settings. The Brev GPU gate and G-COMBINED remain open: no GPU inference, GPU evidence, or dual-runtime end-to-end gate has passed. See the [executed application gate and open-gate record](docs/review/application.md).
+
+## Data and limitations
+
+- The included seed is synthetic development/demo data, not Elektokomplekt operational data. Its six SKUs, sales, stock, stockouts, supplier details, and inbound quantities are generated for repeatable demonstrations.
+- The partner has not supplied a V2 sample or confirmed an accounting/1C exchange schema. The app accepts its documented normalized JSON shape; compatibility with the partner's actual files is unverified. Customer values must be anonymized before import.
+- Forecasting uses the documented `replenishment-v1` heuristic. It is explainable and deterministic, but is not calibrated against partner history and does not claim forecast accuracy.
+- Identity is local single-operator demo identity, without production authentication or roles. Supplier messaging and automatic sending are not implemented.
+- GPU functionality is currently unavailable as described above; the local OpenAI and deterministic degraded path remains usable.
+
+See the [official case and checklist](docs/case.md), [product specification and calculation method](docs/product-spec.md), [HTTP contract](docs/api.md), [AI/tool contract](docs/ai-contract.md), and [Brev deployment record](infra/brev/deployment.md).
 
 ## Disclosures
 
-- Generic planning baseline: `hackalem-v4/templates/AGENTS-TEMPLATE.md` and `hackalem-v4/MODEL-POLICY.md` from the user’s downloaded hackathon pack. Adapted rules are embedded in [AGENTS.md](AGENTS.md). No pre-existing application harness/code was present in the inspected repository; it originally contained only a short README.
-- Official source: supplied `CASE-INPUT.md`, preserved verbatim in [docs/case.md](docs/case.md). Partner identifies Elektokomplekt (ekt.kz); no external partner connection has been established.
-- External technical references consulted: [OpenAI Agents SDK](https://developers.openai.com/api/docs/guides/agents/sdk), [agent definitions](https://developers.openai.com/api/docs/guides/agents/define-agents), [Brev container deployment](https://docs.nvidia.com/brev/guides/development-tools/custom-containers), [NIM prerequisites](https://docs.nvidia.com/nim/large-language-models/latest/get-started/prerequisites.html), [llama.cpp CUDA containers](https://github.com/ggml-org/llama.cpp/blob/master/docs/docker.md), [Qwen fallback model](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF). Exact dependency versions/licenses and runtime model IDs to be recorded after implementation.
-- TODO: record any additional templates/assets, libraries, data provenance, licenses and actual model/runtime usage. No synthetic dataset or runtime inference output has been generated during planning. PROMPT-1 planning also consulted the downloaded design-logistics.md and superseded the older harness model policy with the explicit user policy; no Sentinel template was found.
+- The generic planning baseline was adapted from `hackalem-v4/templates/AGENTS-TEMPLATE.md` and `hackalem-v4/MODEL-POLICY.md` in the user's downloaded hackathon pack. Those materials are planning inputs, not application functionality. The supplied official `CASE-INPUT.md` is preserved in [docs/case.md](docs/case.md). No external partner connection or partner dataset is represented here.
+- Runtime agent use: OpenAI Agents SDK with the OpenAI GPT-4.1 model, called server-side through the configured OpenAI API. The Brev llama.cpp/Qwen configuration is deployment preparation only; it has not been deployed or run on a GPU.
+- Application dependencies and their exact pinned versions are listed in the root and workspace `package.json` files and `pnpm-lock.yaml`. The application uses Next.js, React, Fastify, Zod, Drizzle ORM, PostgreSQL, and OpenAI libraries. Consult the corresponding upstream project and model licenses before redistributing those components.
+- External technical references used while preparing the implementation include the [OpenAI Agents SDK documentation](https://developers.openai.com/api/docs/guides/agents/sdk), [Brev custom container documentation](https://docs.nvidia.com/brev/guides/development-tools/custom-containers), [llama.cpp Docker documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/docker.md), and the [Qwen fallback model card](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF). The Qwen model was not used to produce the recorded demo.

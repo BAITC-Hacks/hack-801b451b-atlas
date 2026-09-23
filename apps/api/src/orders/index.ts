@@ -45,7 +45,8 @@ export async function approveRun(db: Db, runId: string, value: unknown, actor: s
 
 function csvField(value: string | number): string {
   const string = String(value);
-  const protectedValue = /^[=+\-@\t\r]/.test(string) ? `'${string}` : string;
+  const protectedValue = /^[\u0000-\u001f]/u.test(string) || /^\s*[=+\-@]/u.test(string)
+    ? `'${string}` : string;
   return `"${protectedValue.replaceAll('"', '""')}"`;
 }
 

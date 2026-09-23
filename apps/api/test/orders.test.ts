@@ -15,6 +15,7 @@ test('DB-backed edits, approval acknowledgment and bilingual export keep one app
   const app = buildApp(db);
   try {
     const input = buildSyntheticDataset();
+    input.items.find(item => item.sku === 'STABLE')!.unit = '\n=1+1';
     const dataset = await db.createDataset(input);
     const scope = {input, warehouseId: 'WH_DEMO', categoryId: 'CAT_STABLE', scopeId: 'scope_order_test'};
     const inspected = inspectDemand(scope);
@@ -68,6 +69,7 @@ test('DB-backed edits, approval acknowledgment and bilingual export keep one app
     assert.ok(ru.includes(`"${line.recommendedQty}";"${line.recommendedQty + 3}"`));
     assert.ok(ru.includes('Рекомендовано'));
     assert.ok(en.includes('Recommended'));
+    assert.ok(en.includes('"\'\n=1+1"'), 'CSV quotes a leading control character before a formula marker');
     assert.ok(ru.endsWith('\r\n') && en.endsWith('\r\n'));
     const downloaded = await app.inject({method: 'GET', url: `/api/v1/runs/${draft.id}/export?locale=ru&revision=3`});
     assert.equal(downloaded.statusCode, 200);

@@ -12,6 +12,7 @@ export function serverConfig() {
   loadRepositoryEnv();
   return {
     webOrigin: process.env.WEB_ORIGIN || 'http://localhost:3000',
+    host: process.env.API_HOST || '127.0.0.1',
     port: 3001,
     demoOperator: process.env.DEMO_OPERATOR || 'Local demo operator'
   };

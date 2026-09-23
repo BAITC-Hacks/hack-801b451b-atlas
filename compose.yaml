@@ -23,6 +23,7 @@ services:
     restart: unless-stopped
     environment:
       DATABASE_URL: postgres://atlas:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/atlas
+      API_HOST: 0.0.0.0
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}
       GPU_SERVICE_URL: ${GPU_SERVICE_URL:-http://gpu-specialist:8000}

@@ -18,7 +18,10 @@ try {
   });
   await page.goto(baseUrl);
   await page.waitForFunction(() => document.querySelector('select')?.options.length > 1);
-  assert.match(await page.getByRole('combobox', { name: 'Выбрать набор' }).inputValue(), /^[A-Za-z0-9_.:-]+$/);
+  const datasetSelect = page.getByRole('combobox', { name: 'Выбрать набор' });
+  assert.equal(await datasetSelect.locator('option:checked').textContent(), 'Synthetic 24-month replenishment demo v4');
+  await datasetSelect.selectOption({ label: 'Synthetic 24-month replenishment demo v4' });
+  assert.match(await datasetSelect.inputValue(), /^[A-Za-z0-9_.:-]+$/);
   await page.getByRole('combobox', { name: 'Склад' }).selectOption('WH_DEMO');
 
   const [createdResponse] = await Promise.all([
@@ -85,11 +88,15 @@ try {
 
   await page.reload();
   await page.getByText('Order approved', { exact: true }).first().waitFor();
+  await page.getByText('Approved after warning review').waitFor();
   assert.match(await page.locator('main').innerText(), /Revision: 3/);
   assert.equal(runPosts, 1);
   const persisted = await page.request.get(`${baseUrl}/api/v1/runs/${draft.id}`);
   assert.equal(persisted.status(), 200);
   assert.equal((await persisted.json()).run.revision, 3);
+  if (process.env.ATLAS_E2E_SCREENSHOT) {
+    await page.screenshot({ path: process.env.ATLAS_E2E_SCREENSHOT, fullPage: true });
+  }
   console.log(JSON.stringify({ result: 'pass', runId: draft.id, datasetId: draft.datasetId,
     openai: draft.ai.runtimes[0].status, brevGpu: draft.ai.runtimes[1].status,
     lines: draft.lines.length, approvedRevision: approved.revision, staleStatus: stale.status(),

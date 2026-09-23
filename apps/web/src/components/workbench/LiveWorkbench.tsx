@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 
 const RUN_KEY = "atlas-run-id";
+const DEMO_DATASET_LABEL = "Synthetic 24-month replenishment demo v4";
 type Messages = ReturnType<typeof useLocale>["messages"];
 type Notice = "imported" | "ready" | "degraded" | "edited" | "approved" | "exported";
 
@@ -68,7 +69,7 @@ export function LiveWorkbench() {
         const result = await api.listDatasets(controller.signal);
         if (!controller.signal.aborted) {
           setDatasets(result.datasets);
-          setDatasetId(result.datasets[0]?.id ?? "");
+          setDatasetId((result.datasets.find(item => item.label === DEMO_DATASET_LABEL) ?? result.datasets[0])?.id ?? "");
         }
       } catch (cause) {
         if (!controller.signal.aborted) setError(cause);
@@ -219,10 +220,10 @@ export function LiveWorkbench() {
             <Button type="button" disabled={!dataset || !warehouseId || busy !== null} onClick={() => void calculate()}>{busy === "run" ? m.run.loading : m.run.start}</Button>
           </div>
         </div>
-        <p className="flex flex-wrap gap-x-8 gap-y-2 border-t border-line bg-[#fafbf9] px-5 py-3 text-xs text-muted"><span>{m.common.source}: {dataset ? `${dataset.label} · ${dataset.kind === "synthetic" ? m.dataset.synthetic : m.dataset.imported}` : m.common.unavailable}</span><span>{m.common.asOf}: {dataset?.asOf ?? m.common.unavailable}</span><span>{m.common.status}: {run ? (run.mode === "degraded" ? m.run.degraded : m.run.success) : m.run.empty}</span></p>
+        <p className="flex flex-wrap gap-x-8 gap-y-2 border-t border-line bg-[#fafbf9] px-5 py-3 text-xs text-muted"><span>{m.common.source}: {dataset ? `${dataset.label} · ${dataset.kind === "synthetic" ? m.dataset.synthetic : m.dataset.imported}` : m.common.unavailable}</span><span>{m.common.asOf}: {dataset?.asOf ?? m.common.unavailable}</span><span>{m.common.status}: {run ? (run.status === "approved" ? (run.mode === "degraded" ? m.run.approvedDegraded : m.approval.approved) : run.mode === "degraded" ? m.run.degraded : m.run.success) : m.run.empty}</span></p>
       </section>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <section className="min-w-0 overflow-hidden rounded-lg border border-line bg-white" aria-labelledby="orders-heading"><div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4"><h2 id="orders-heading" className="font-semibold">{m.orders.title}</h2><div className="flex gap-2"><Button type="button" disabled={!run || busy !== null} onClick={() => void refreshRun()} variant="outline" size="small">{m.common.retry}</Button><Button type="button" disabled={run?.status !== "approved" || busy !== null} onClick={() => void download()} variant="outline" size="small">{busy === "export" ? m.common.loading : m.orders.export}</Button></div></div>
+        <section className="min-w-0 overflow-hidden rounded-lg border border-line bg-white" aria-labelledby="orders-heading"><div className="flex items-center justify-between gap-3 border-b border-line px-5 py-4"><h2 id="orders-heading" className="font-semibold">{m.orders.title}</h2><div className="flex gap-2"><Button type="button" disabled={!run || busy !== null} onClick={() => void refreshRun()} variant="outline" size="small">{m.run.refresh}</Button><Button type="button" disabled={run?.status !== "approved" || busy !== null} onClick={() => void download()} variant="outline" size="small">{busy === "export" ? m.common.loading : m.orders.export}</Button></div></div>
           {run && <p className="border-b border-line px-5 py-2 text-xs text-muted">{m.run.revision}: {run.revision} · {m.common.asOf}: {run.asOf} · {run.status === "approved" ? m.approval.approved : m.approval.pending}</p>}
           <div className="overflow-x-auto"><table className="w-full min-w-[800px] border-collapse text-left text-sm"><thead className="bg-[#fafbf9] text-xs text-muted"><tr><th className="px-4 py-3">{m.orders.supplier}</th><th className="px-4 py-3">{m.orders.sku}</th><th className="px-4 py-3">{m.orders.product}</th><th className="px-4 py-3">{m.orders.unit}</th><th className="px-4 py-3 text-right">{m.orders.recommended}</th><th className="px-4 py-3 text-right">{m.orders.final}</th><th className="px-4 py-3">{m.orders.urgency}</th><th className="px-4 py-3">{m.approval.edit}</th></tr></thead><tbody>{supplierGroups.flatMap(group => group.map((line, index) => <tr key={line.sku} className="border-t border-line align-top"><td className="px-4 py-3">{index === 0 ? line.supplierName : ""}</td><td className="px-4 py-3 font-mono text-xs">{line.sku}</td><td className="px-4 py-3"><p>{line.name}</p><p className="mt-1 text-xs leading-5 text-muted">{m.orders.rationale}: {number(line.metrics.baseDaily, locale, 2)} × {number(line.metrics.seasonFactor, locale, 2)} × {number(line.metrics.trendFactor, locale, 2)} × {number(1 + line.metrics.plannedGrowthPct / 100, locale, 2)} × {line.metrics.horizonDays} − {line.metrics.stock} − {line.metrics.eligibleInbound}</p></td><td className="px-4 py-3">{line.unit}</td><td className="px-4 py-3 text-right tabular-nums">{number(line.recommendedQty, locale)}</td><td className="px-4 py-3 text-right tabular-nums">{number(line.finalQty, locale)}</td><td className="px-4 py-3">{m.orders[line.urgency]}</td><td className="px-4 py-3"><Button type="button" size="small" variant="outline" disabled={run?.status !== "draft" || busy !== null} onClick={() => startEdit(line)}>{m.approval.edit}</Button></td></tr>))}</tbody></table>
             {(!run || run.lines.length === 0) && <div className="flex min-h-52 flex-col items-center justify-center gap-2 border-t border-line px-6 py-8 text-center"><DatabaseIcon /><p className="font-medium">{run ? m.orders.noRows : m.run.empty}</p><p className="max-w-sm text-sm text-muted">{run ? m.orders.zeroOrder : m.run.emptyHelp}</p></div>}

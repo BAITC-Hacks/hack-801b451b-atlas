@@ -98,10 +98,14 @@ export async function runReplenishment(
   const classification = agent?.classification ?? null;
   const specialist = classification?.status === 'success' ? classification.report : null;
   const gpuEvidence = classification?.status === 'success' ? classification.evidence : null;
+  const openaiElapsedMs = agent?.elapsedMs ?? (config.openai ? Math.max(0, now() - started) : 0);
   let calculation = agent?.calculation ?? null;
   let usedFallback = false;
+  let fallbackElapsedMs = 0;
   if (!calculation) {
+    const fallbackStarted = now();
     const fallback = await fallbackCalculation(tools, specialist);
+    fallbackElapsedMs = Math.max(0, now() - fallbackStarted);
     if (!fallback.ok) return fatal(fallback.code);
     calculation = fallback.value;
     usedFallback = true;
@@ -110,7 +114,7 @@ export async function runReplenishment(
   const openaiStatus: RuntimeStatus = {
     runtime: 'openai', status: agent?.ok ? 'success' : 'failed',
     model: config.openai?.model ?? null, attempts: agent?.attempts ?? 0,
-    elapsedMs: agent?.elapsedMs ?? (config.openai ? Math.max(0, now() - started) : 0),
+    elapsedMs: openaiElapsedMs,
     errorCode: agent?.ok ? null : agent?.errorCode ?? (unexpectedOpenAiFailure ? 'RUNTIME_ERROR' : config.openai ? 'DEADLINE' : 'AUTH'),
     skipReason: null,
   };
@@ -129,7 +133,7 @@ export async function runReplenishment(
   if (gpuStatus.status === 'failed') runtimeWarnings.push({code: 'GPU_WORKLOAD_UNAVAILABLE', sku: null, evidenceIds: []});
   const trace = [...(agent?.trace ?? [])];
   if (usedFallback) trace.push({id: `${input.data.runId}:${trace.length + 1}`, kind: 'tool' as const,
-    name: 'calculateOrders' as const, status: 'success' as const, elapsedMs: Math.max(0, now() - started), evidenceIds: calculation.lines.map(line => line.sku)});
+    name: 'calculateOrders' as const, status: 'success' as const, elapsedMs: fallbackElapsedMs, evidenceIds: calculation.lines.map(line => line.sku)});
   trace.push({id: `${input.data.runId}:${trace.length + 1}`, kind: 'runtime' as const,
     name: 'openai' as const, status: openaiStatus.status, elapsedMs: openaiStatus.elapsedMs, evidenceIds: []});
   trace.push({id: `${input.data.runId}:${trace.length + 1}`, kind: 'runtime' as const,
@@ -137,7 +141,7 @@ export async function runReplenishment(
     evidenceIds: specialist?.decisions.map(decision => decision.eventId) ?? []});
 
   const outcome: AiOutcome = {ok: true, result: {
-    mode: agent?.ok && gpuStatus.status !== 'failed' && gpuStatus.skipReason !== 'not_reached' ? 'live' : 'degraded',
+    mode: agent?.ok && gpuStatus.status === 'success' ? 'live' : 'degraded',
     calculationId: calculation.calculationId, decision: agent?.ok ? agent.decision : null,
     specialist, candidates: calculation.candidates, runtimes: [openaiStatus, gpuStatus],
     gpuEvidence, trace, warnings: dedupeWarnings([...calculation.warnings, ...runtimeWarnings]),

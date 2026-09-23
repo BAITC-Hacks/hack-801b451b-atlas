@@ -48,6 +48,8 @@ export const en = {
     loading: "Calculating…",
     success: "Draft calculation ready",
     degraded: "Draft needs review",
+    approvedDegraded: "Approved after warning review",
+    refresh: "Refresh run",
     failed: "Calculation failed",
     updated: "Updated",
     revision: "Revision",
