@@ -1,0 +1,11 @@
+.git
+.repowise
+node_modules
+**/node_modules
+**/dist
+**/.next
+.env
+.env.*
+!.env.example
+infra/brev/evidence
+coverage

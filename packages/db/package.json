@@ -1,0 +1,27 @@
+{
+  "name": "@atlas/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./fixture": { "types": "./dist/fixture.d.ts", "default": "./dist/fixture.js" }
+  },
+  "scripts": {
+    "migrate": "tsx scripts/migrate.ts",
+    "seed": "tsx scripts/seed.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit"
+  },
+  "dependencies": {
+    "@atlas/contracts": "workspace:*",
+    "drizzle-orm": "0.44.7",
+    "pg": "8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4",
+    "@types/pg": "8.15.5"
+  }
+}

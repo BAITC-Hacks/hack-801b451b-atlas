@@ -1,0 +1,52 @@
+name: atlas
+
+services:
+  db:
+    image: postgres:16.9-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: atlas
+      POSTGRES_DB: atlas
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U atlas -d atlas"]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://atlas:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/atlas
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-}
+      GPU_SERVICE_URL: ${GPU_SERVICE_URL:-http://gpu-specialist:8000}
+      GPU_MODEL_ID: ${GPU_MODEL_ID:-}
+      GPU_VERIFICATION_PATH: ${GPU_VERIFICATION_PATH:-/app/infra/brev/evidence/deployment.json}
+      DEMO_OPERATOR: ${DEMO_OPERATOR:-Local demo operator}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:3000}
+    volumes:
+      - ./infra/brev/evidence:/app/infra/brev/evidence:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: ${API_INTERNAL_URL:-http://api:3001}
+    ports:
+      - 127.0.0.1:3000:3000
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:

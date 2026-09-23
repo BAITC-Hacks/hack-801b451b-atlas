@@ -1,0 +1,21 @@
+{
+  "name": "@atlas/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/server.js",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json --noEmit",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "@atlas/contracts": "workspace:*",
+    "@atlas/db": "workspace:*",
+    "fastify": "5.12.5",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.4"
+  }
+}
