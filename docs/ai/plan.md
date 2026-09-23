@@ -29,7 +29,7 @@ Lane orchestrator GPT-6 Sol High; normal coding/worker GPT-6 Sol Medium; simple 
 
 OpenAI agent observes safe deterministic tool summaries, invokes GPU classification and calculator, then returns a validated review disposition. GPU specialist receives numeric candidate features, not the OpenAI answer. Its real class/confidence/evidence affects guarded event exclusion/retention and review. T02 retains numerical authority. AI has no approval/send/DB tool. Both results have strict schemas and run-scoped evidence.
 
-AI03 owns G01/G02 production HTTP once; B06 owns standalone operational smoke/deployment. Separate configured and actual-GPU checkpoints. Missing GPU/current record produces failed brev_gpu and null specialist/evidence; no host API credit/key or CPU substitution. AI02 real OpenAI smoke can run before GPU startup. AI05 proves material effect; a configured endpoint, model listing or nvidia-smi alone is insufficient.
+AI03 implementation depends only on AI01; its executed checkpoint additionally waits B06, as recorded in its task packet. AI03 owns G01/G02 production HTTP once; B06 owns standalone operational smoke/deployment. Separate configured and actual-GPU checkpoints. Missing GPU/current record produces failed brev_gpu and null specialist/evidence; no host API credit/key or CPU substitution. AI02 real OpenAI smoke can run before GPU startup. AI05 proves material effect; a configured endpoint, model listing or nvidia-smi alone is insufficient.
 
 ## Completion
 

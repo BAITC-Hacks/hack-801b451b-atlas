@@ -2,7 +2,7 @@
 
 ## Goal
 
-Review edits approval export and runtime evidence. Wave 1; estimated active effort 30 minutes (download waits may overlap other work). Follow [execution conventions](../../execution-conventions.md); commands below are implementation targets, not already-existing commands.
+Review edits approval export and runtime evidence. Wave 1; estimated active effort 20 minutes (download waits may overlap other work). Follow [execution conventions](../../execution-conventions.md); commands below are implementation targets, not already-existing commands.
 
 ## Owner
 

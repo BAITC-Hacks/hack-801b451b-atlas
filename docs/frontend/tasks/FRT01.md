@@ -2,7 +2,7 @@
 
 ## Goal
 
-Operational shell and bilingual foundation. Wave 0; estimated active effort 25 minutes (download waits may overlap other work). Follow [execution conventions](../../execution-conventions.md); commands below are implementation targets, not already-existing commands.
+Operational shell and bilingual foundation. Wave 0; estimated active effort 20 minutes (download waits may overlap other work). Follow [execution conventions](../../execution-conventions.md); commands below are implementation targets, not already-existing commands.
 
 ## Owner
 
