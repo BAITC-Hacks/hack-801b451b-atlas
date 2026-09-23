@@ -131,6 +131,23 @@ export const CreateRunBodySchema = z.strictObject({datasetId: IdSchema, warehous
 export const RunResponseSchema = z.strictObject({run: RunSchema});
 export const RunIdParamsSchema = z.strictObject({runId: IdSchema});
 export const ChangeLinesBodySchema = z.strictObject({expectedRevision: z.number().int().min(1), changes: z.array(z.strictObject({sku: IdSchema, finalQty: QtySchema, overrideReason: z.string().min(1).max(240)})).min(1).max(12)}).refine(v => new Set(v.changes.map(c => c.sku)).size === v.changes.length, 'Duplicate SKU');
+export const MoneyMinorSchema = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export const QuoteRunBodySchema = z.strictObject({
+  expectedRevision: z.number().int().min(1),
+  currency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+  prices: z.array(z.strictObject({sku: IdSchema, unitPriceMinor: MoneyMinorSchema})).max(12),
+  budgetMinor: MoneyMinorSchema.optional()
+}).refine(value => new Set(value.prices.map(price => price.sku)).size === value.prices.length, 'Duplicate SKU price');
+export const OrderQuoteLineSchema = z.strictObject({
+  sku: IdSchema, finalQty: QtySchema, unitPriceMinor: MoneyMinorSchema.nullable(), lineTotalMinor: MoneyMinorSchema
+});
+export const OrderQuoteSchema = z.strictObject({
+  runId: IdSchema, revision: z.number().int().min(1), currency: z.string().length(3),
+  lines: z.array(OrderQuoteLineSchema).max(12), totalMinor: MoneyMinorSchema,
+  budgetMinor: MoneyMinorSchema.nullable(), remainingMinor: MoneyMinorSchema.nullable(),
+  overageMinor: MoneyMinorSchema.nullable(), withinBudget: z.boolean().nullable()
+});
+export const QuoteRunResponseSchema = z.strictObject({quote: OrderQuoteSchema});
 export const ApproveRunBodySchema = z.strictObject({expectedRevision: z.number().int().min(1), confirm: z.literal(true), acknowledgeWarnings: z.boolean()});
 export const ExportQuerySchema = z.strictObject({locale: LocaleSchema, revision: z.coerce.number().int().positive()});
 export const HealthResponseSchema = z.strictObject({status: z.literal('ok'), database: z.literal('ok')});
@@ -148,6 +165,9 @@ export type GpuCallOutcome = z.infer<typeof GpuCallOutcomeSchema>;
 export type AiResult = z.infer<typeof AiResultSchema>;
 export type AiOutcome = z.infer<typeof AiOutcomeSchema>;
 export type Run = z.infer<typeof RunSchema>;
+export type QuoteRunBody = z.infer<typeof QuoteRunBodySchema>;
+export type OrderQuote = z.infer<typeof OrderQuoteSchema>;
+export type QuoteRunResponse = z.infer<typeof QuoteRunResponseSchema>;
 export type Warning = z.infer<typeof WarningSchema>;
 export type RuntimeStatus = z.infer<typeof RuntimeStatusSchema>;
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;

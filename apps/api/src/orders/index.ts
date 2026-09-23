@@ -7,7 +7,9 @@ import {
   type Db
 } from '@atlas/db';
 
-export class OrderInputError extends Error { constructor() { super('VALIDATION_ERROR'); } }
+export class OrderInputError extends Error {
+  constructor(readonly issues?: {path: string; code: string}[]) { super('VALIDATION_ERROR'); }
+}
 export class ReviewRequiredError extends Error { constructor() { super('REVIEW_REQUIRED'); } }
 
 async function currentDraft(db: Db, runId: string, expectedRevision: number): Promise<Run> {

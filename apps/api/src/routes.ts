@@ -8,6 +8,7 @@ import { AiOutcomeSchema, CreateRunBodySchema, DatasetInputSchema, ErrorSchema,
   RunIdParamsSchema, type ErrorCode } from '@atlas/contracts';
 import { CalculationError } from './calculation/index.js';
 import { approveRun, editRun, exportRun, OrderInputError, ReviewRequiredError } from './orders/index.js';
+import { quoteRun } from './orders/quote.js';
 import { assembleDraft } from './runs/assemble.js';
 import { createDemandTools } from './tools/index.js';
 import { serverConfig } from './config.js';
@@ -18,7 +19,9 @@ function sendError(reply: FastifyReply, status: number, code: ErrorCode, issues?
 }
 
 function sendOrderError(reply: FastifyReply, error: unknown) {
-  if (error instanceof ZodError || error instanceof OrderInputError) return sendError(reply, 400, 'VALIDATION_ERROR');
+  if (error instanceof ZodError) return sendError(reply, 400, 'VALIDATION_ERROR',
+    error.issues.slice(0, 32).map(issue => ({path: issue.path.join('.'), code: issue.code})));
+  if (error instanceof OrderInputError) return sendError(reply, 400, 'VALIDATION_ERROR', error.issues);
   if (error instanceof NotFoundError) return sendError(reply, 404, 'NOT_FOUND');
   if (error instanceof RevisionConflictError) return sendError(reply, 409, 'REVISION_CONFLICT');
   if (error instanceof RunLockedError) return sendError(reply, 409, 'RUN_LOCKED');
@@ -118,6 +121,15 @@ export function registerRoutes(app: FastifyInstance, db: Db): void {
     if (!params.success) return sendError(reply, 400, 'VALIDATION_ERROR');
     try { return {run: await editRun(db, params.data.runId, request.body, demoOperator)}; }
     catch (error) { return sendOrderError(reply, error); }
+  });
+
+  app.post('/api/v1/runs/:runId/quote', async (request: FastifyRequest, reply) => {
+    const params = RunIdParamsSchema.safeParse(request.params);
+    if (!params.success) return sendError(reply, 400, 'VALIDATION_ERROR');
+    try {
+      const quote = await quoteRun(db, params.data.runId, request.body);
+      return reply.header('Cache-Control', 'no-store').send({quote});
+    } catch (error) { return sendOrderError(reply, error); }
   });
 
   app.post('/api/v1/runs/:runId/approve', async (request: FastifyRequest, reply) => {
