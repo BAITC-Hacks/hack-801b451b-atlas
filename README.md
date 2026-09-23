@@ -70,9 +70,9 @@ The browser test requires the running Compose stack, seeded data, a valid OpenAI
 
 ## Runtime and deployment status
 
-OpenAI GPT-4.1 is the primary agent/control plane. Brev GPU inference has been verified on the running GCP L4 for the recorded combined run. The deployment history, current instance/runtime details, evidence requirements and stop-billing reminder are in [infra/brev/deployment.md](infra/brev/deployment.md).
+OpenAI GPT-4.1 is the primary agent/control plane. Brev GPU inference was verified on a GCP L4 for the recorded combined run. The instance was stopped after verification; Brev displayed $0.02/hour for retained storage. The deployment history, runtime details and evidence requirements are in [infra/brev/deployment.md](infra/brev/deployment.md).
 
-The private GPU adapter boundary remains in `packages/ai`, configured through the existing Compose overlay and server-side `.env` settings. The recorded same-run proof covers GPU inference, correlated compute evidence, material event-decision impact, UI review, approval and export. Evidence is tied to the running deployment and must be regenerated after a runtime restart or change. The supplied partner/1C sample remains unverified.
+The private GPU adapter boundary remains in `packages/ai`, configured through the existing Compose overlay and server-side `.env` settings. The recorded same-run proof covers GPU inference, correlated compute evidence, material event-decision impact, UI review, approval and export. Evidence is tied to the verified deployment and must be regenerated after a runtime restart or change. The supplied partner/1C sample remains unverified.
 
 ## Data and limitations
 

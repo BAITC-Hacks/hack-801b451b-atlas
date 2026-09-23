@@ -15,6 +15,7 @@ This records the earlier local product flow while the GPU runtime was unavailabl
 - `pnpm --filter @atlas/web e2e:local` after restart — exit 0, run `30565816-21f4-4ac0-8607-7ab572a4293a`.
 - A further production web rebuild after selecting the stable seed by default and clarifying the approved degraded status passed `pnpm --filter @atlas/web e2e:local` — exit 0, run `9b054028-748c-425e-9857-01213897dd8e` with six lines, OpenAI success, truthful Brev failure, approved revision 3, stale HTTP 409 and 1,508-byte CSV.
 - After the API bind and CSV escaping fixes, a rebuilt API container passed `pnpm --filter @atlas/web e2e:local` — exit 0, run `5475a279-93de-4497-a833-078bb9429291`; the test also asserted the stable seed was selected by default. OpenAI succeeded, the missing GPU remained failed, revision 3 persisted, the stale edit returned 409, and EN CSV contained 1,511 bytes.
+- After the combined GPU run, the same browser test passed again against the local degraded Compose stack: run `4a078ad1-7953-468e-9414-f258e549fb8e`, OpenAI success, Brev GPU failed, six lines, stale edit HTTP 409, approved revision 3, 1,511-byte CSV and one run POST across the locale switch.
 
 ## Observed workflow
 
