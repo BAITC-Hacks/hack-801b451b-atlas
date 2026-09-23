@@ -4,6 +4,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+  sharp: true
 
 overrides:
   openai: 7.21.0

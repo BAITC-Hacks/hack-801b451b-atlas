@@ -69,7 +69,7 @@ test("H05-H07 preserve revision, locale, and CSV filename", async () => {
   assert.equal(exported.filename, "order-run-1.csv");
   assert.equal(exported.locale, "en");
   assert.equal(exported.revision, 2);
-  assert.match(await exported.bytes.text(), /^\ufeff/);
+  assert.deepEqual([...new Uint8Array(await exported.bytes.arrayBuffer()).slice(0, 3)], [0xef, 0xbb, 0xbf]);
 });
 
 test("typed errors distinguish 403, 409, 422, 503 and 504", async () => {
