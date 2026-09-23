@@ -1,0 +1,16 @@
+{
+  "model": "atlas-specialist",
+  "messages": [
+    {
+      "role": "system",
+      "content": "Classify the numeric sales-event candidate. Return only JSON with exactly one decisions array item: {\"decisions\":[{\"eventId\":string,\"label\":\"one_off\"|\"recurring\"|\"uncertain\",\"confidence\":number,\"evidenceCodes\":string[]}]}."
+    },
+    {
+      "role": "user",
+      "content": "{\"candidates\":[{\"eventId\":\"smoke-recurring-1\",\"sku\":\"SKU1\",\"date\":\"2026-01-01\",\"quantity\":42,\"medianQuantity\":5,\"madQuantity\":1,\"priorObservationCount\":20,\"recurrenceCount\":4,\"customerShare90d\":0.4,\"eventValue\":420,\"hardOneOff\":false}]}"
+    }
+  ],
+  "temperature": 0,
+  "max_tokens": 4096,
+  "stream": false
+}
