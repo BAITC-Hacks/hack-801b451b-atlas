@@ -56,45 +56,158 @@ function aggregateEvents(scope: DemandScope, selectedSkus: Set<string>): SaleEve
   return [...byKey.values()].sort((a, b) => a.date.localeCompare(b.date) || a.sku.localeCompare(b.sku) || a.id.localeCompare(b.id));
 }
 
+class RollingQuantiles {
+  private readonly values: number[];
+  private readonly positions: Map<number, number>;
+  private readonly tree: number[];
+  count = 0;
+
+  constructor(events: SaleEvent[]) {
+    this.values = [...new Set(events.filter(event => event.quantity > 0).map(event => event.quantity))].sort((a, b) => a - b);
+    this.positions = new Map(this.values.map((value, index) => [value, index]));
+    this.tree = Array(this.values.length + 1).fill(0);
+  }
+
+  add(value: number, change: 1 | -1) {
+    const index = this.positions.get(value);
+    if (index === undefined) throw new CalculationError('CALCULATION_FAILED');
+    for (let i = index + 1; i < this.tree.length; i += i & -i) this.tree[i] = this.tree[i]! + change;
+    this.count += change;
+  }
+
+  private prefix(end: number) {
+    let count = 0;
+    for (let i = end; i > 0; i -= i & -i) count += this.tree[i]!;
+    return count;
+  }
+
+  private lowerBound(value: number) {
+    let left = 0, right = this.values.length;
+    while (left < right) {
+      const middle = (left + right) >>> 1;
+      if (this.values[middle]! < value) left = middle + 1;
+      else right = middle;
+    }
+    return left;
+  }
+
+  private upperBound(value: number) {
+    let left = 0, right = this.values.length;
+    while (left < right) {
+      const middle = (left + right) >>> 1;
+      if (this.values[middle]! <= value) left = middle + 1;
+      else right = middle;
+    }
+    return left;
+  }
+
+  private kth(position: number) {
+    let index = 0, bit = 1;
+    while (bit < this.tree.length) bit <<= 1;
+    for (bit >>= 1; bit > 0; bit >>= 1) {
+      const next = index + bit;
+      if (next < this.tree.length && this.tree[next]! < position) {
+        position -= this.tree[next]!;
+        index = next;
+      }
+    }
+    return this.values[index]!;
+  }
+
+  median() {
+    if (!this.count) return 0;
+    return (this.kth(Math.floor((this.count + 1) / 2)) + this.kth(Math.floor((this.count + 2) / 2))) / 2;
+  }
+
+  mad(medianValue: number) {
+    if (!this.count) return 0;
+    const medianTwice = medianValue * 2;
+    const maxRadius = Math.max(Math.abs(this.values[0]! * 2 - medianTwice),
+      Math.abs(this.values[this.values.length - 1]! * 2 - medianTwice));
+    const radiusAt = (position: number) => {
+      let low = 0, high = maxRadius;
+      while (low < high) {
+        const radius = Math.floor((low + high) / 2);
+        const below = this.prefix(this.lowerBound((medianTwice - radius) / 2));
+        const through = this.prefix(this.upperBound((medianTwice + radius) / 2));
+        if (through - below >= position) high = radius;
+        else low = radius + 1;
+      }
+      return low;
+    };
+    return (radiusAt(Math.floor((this.count + 1) / 2)) + radiusAt(Math.floor((this.count + 2) / 2))) / 4;
+  }
+}
+
 export function inspectDemand(scope: DemandScope, signal?: AbortSignal): InspectionWork {
   assertActive(signal);
   const items = scopedItems(scope);
   const skus = new Set(items.map(item => item.sku));
   const events = aggregateEvents(scope, skus);
+  const bySku = new Map(items.map(item => [item.sku, [] as SaleEvent[]]));
+  for (const event of events) bySku.get(event.sku)!.push(event);
   const candidates: Candidate[] = [];
   const warnings: Warning[] = [];
   for (const item of items) {
-    const skuEvents = events.filter(event => event.sku === item.sku);
+    const skuEvents = bySku.get(item.sku)!;
     if (skuEvents.filter(event => event.quantity > 0).length < 8) warnings.push(warning('INSUFFICIENT_HISTORY', item.sku));
-    for (const event of skuEvents) {
+    const quantiles = new RollingQuantiles(skuEvents);
+    const window: SaleEvent[] = [];
+    const customerQuantities = new Map<string, number>();
+    let head = 0, windowQuantity = 0;
+    for (let index = 0; index < skuEvents.length;) {
       assertActive(signal);
-      if (event.quantity <= 0) continue;
-      const start = epoch(event.date) - 90 * dayMs;
-      const prior = skuEvents.filter(other => other.quantity > 0 && epoch(other.date) >= start && other.date < event.date);
-      const quantities = prior.map(other => other.quantity);
-      if (quantities.length < 8) {
-        if (quantities.length > 0) {
-          const sparseMedian = median(quantities);
-          const sparseMad = median(quantities.map(value => Math.abs(value - sparseMedian)));
-          if (event.quantity > Math.max(6 * sparseMedian, sparseMedian + 6 * sparseMad))
-            warnings.push(warning('INSUFFICIENT_HISTORY', item.sku));
-        }
-        continue;
+      const date = skuEvents[index]!.date;
+      const start = addDays(date, -90);
+      while (head < window.length && window[head]!.date < start) {
+        const expired = window[head++]!;
+        quantiles.add(expired.quantity, -1);
+        windowQuantity -= expired.quantity;
+        const remaining = customerQuantities.get(expired.customerToken)! - expired.quantity;
+        if (remaining) customerQuantities.set(expired.customerToken, remaining);
+        else customerQuantities.delete(expired.customerToken);
       }
-      const m = median(quantities);
-      const mad = median(quantities.map(value => Math.abs(value - m)));
-      if (!(event.quantity > Math.max(6 * m, m + 6 * mad))) continue;
-      const recurrenceCount = prior.filter(other => other.customerToken === event.customerToken &&
-        other.quantity >= 0.5 * event.quantity && other.quantity <= 2 * event.quantity).length;
-      const windowEvents = [...prior, ...skuEvents.filter(other => other.date === event.date && other.quantity > 0)];
-      const total = windowEvents.reduce((sum, other) => sum + other.quantity, 0);
-      const customerTotal = windowEvents.filter(other => other.customerToken === event.customerToken)
-        .reduce((sum, other) => sum + other.quantity, 0);
-      candidates.push({eventId: event.id, sku: item.sku, date: event.date, quantity: event.quantity,
-        medianQuantity: m, madQuantity: mad, priorObservationCount: prior.length, recurrenceCount,
-        customerShare90d: total ? customerTotal / total : 0, eventValue: event.value,
-        hardOneOff: event.quantity >= 10 * m && recurrenceCount < 3});
-      if (candidates.length > 24) throw new CalculationError('CANDIDATE_LIMIT');
+      let end = index;
+      while (end < skuEvents.length && skuEvents[end]!.date === date) end++;
+      const today = skuEvents.slice(index, end).filter(event => event.quantity > 0);
+      const todayQuantity = today.reduce((sum, event) => sum + event.quantity, 0);
+      const todayByCustomer = new Map<string, number>();
+      for (const event of today) todayByCustomer.set(event.customerToken,
+        (todayByCustomer.get(event.customerToken) ?? 0) + event.quantity);
+      for (const event of today) {
+        const priorCount = quantiles.count;
+        if (!priorCount) continue;
+        const m = quantiles.median();
+        if (event.quantity <= 6 * m) continue;
+        const mad = quantiles.mad(m);
+        if (priorCount < 8) {
+          if (event.quantity > Math.max(6 * m, m + 6 * mad))
+            warnings.push(warning('INSUFFICIENT_HISTORY', item.sku));
+          continue;
+        }
+        if (!(event.quantity > Math.max(6 * m, m + 6 * mad))) continue;
+        let recurrenceCount = 0;
+        for (let priorIndex = head; priorIndex < window.length; priorIndex++) {
+          const other = window[priorIndex]!;
+          if (other.customerToken === event.customerToken && other.quantity >= 0.5 * event.quantity &&
+              other.quantity <= 2 * event.quantity) recurrenceCount++;
+        }
+        const total = windowQuantity + todayQuantity;
+        const customerTotal = (customerQuantities.get(event.customerToken) ?? 0) +
+          (todayByCustomer.get(event.customerToken) ?? 0);
+        candidates.push({eventId: event.id, sku: item.sku, date: event.date, quantity: event.quantity,
+          medianQuantity: m, madQuantity: mad, priorObservationCount: priorCount, recurrenceCount,
+          customerShare90d: total ? customerTotal / total : 0, eventValue: event.value,
+          hardOneOff: event.quantity >= 10 * m && recurrenceCount < 3});
+        if (candidates.length > 24) throw new CalculationError('CANDIDATE_LIMIT');
+      }
+      for (const event of today) {
+        window.push(event);
+        quantiles.add(event.quantity, 1);
+        windowQuantity += event.quantity;
+        customerQuantities.set(event.customerToken, (customerQuantities.get(event.customerToken) ?? 0) + event.quantity);
+      }
+      index = end;
     }
   }
   candidates.sort((a, b) => a.date.localeCompare(b.date) || a.sku.localeCompare(b.sku) || a.eventId.localeCompare(b.eventId));
@@ -213,27 +326,38 @@ export function calculateDemand(scope: DemandScope, work: InspectionWork, specia
       dailyActual.set(event.date, (dailyActual.get(event.date) ?? 0) + event.quantity);
     }
     const dates: string[] = [], cleaned: number[] = [], raw: number[] = [];
+    const historyStart = epoch(input.historyStart);
+    const dayCount = (epoch(input.asOf) - historyStart) / dayMs;
+    const stockoutChanges = new Int32Array(dayCount + 1);
+    for (const interval of input.stockouts) {
+      if (interval.sku !== item.sku || interval.warehouseId !== scope.warehouseId) continue;
+      const first = Math.max(0, (epoch(interval.start) - historyStart) / dayMs);
+      const afterLast = Math.min(dayCount, (epoch(interval.end) - historyStart) / dayMs + 1);
+      if (first < afterLast) { stockoutChanges[first]!++; stockoutChanges[afterLast]!--; }
+    }
+    const stockoutDays = new Uint8Array(dayCount);
+    let activeStockouts = 0;
+    for (let index = 0; index < dayCount; index++) {
+      const date = dateAt(historyStart + index * dayMs);
+      activeStockouts += stockoutChanges[index]!;
+      stockoutDays[index] = activeStockouts > 0 ? 1 : 0;
+      dates.push(date);
+      raw.push(dailyActual.get(date) ?? 0);
+    }
     let lostDemandUnits = 0;
-    for (let day = epoch(input.historyStart); day < epoch(input.asOf); day += dayMs) {
-      const date = dateAt(day);
-      const actual = dailyActual.get(date) ?? 0;
-      const isStockout = input.stockouts.some(row => row.sku === item.sku && row.warehouseId === scope.warehouseId &&
-        row.start <= date && row.end >= date);
+    for (let index = 0; index < dayCount; index++) {
+      const actual = raw[index]!;
       let corrected = actual;
-      if (isStockout) {
+      if (stockoutDays[index]) {
         const prior: number[] = [];
-        for (let previousDay = day - 56 * dayMs; previousDay < day; previousDay += dayMs) {
-          const previousDate = dateAt(previousDay);
-          if (previousDate < input.historyStart) continue;
-          if (input.stockouts.some(row => row.sku === item.sku && row.warehouseId === scope.warehouseId &&
-            row.start <= previousDate && row.end >= previousDate)) continue;
-          prior.push(dailyActual.get(previousDate) ?? 0);
+        for (let previous = Math.max(0, index - 56); previous < index; previous++) {
+          if (!stockoutDays[previous]) prior.push(raw[previous]!);
         }
         if (prior.length >= 7) corrected = Math.max(actual, median(prior));
         else itemWarnings.push(warning('INSUFFICIENT_HISTORY', item.sku));
       }
       lostDemandUnits += corrected - actual;
-      dates.push(date); cleaned.push(corrected); raw.push(actual);
+      cleaned.push(corrected);
     }
     const result = forecast(cleaned, dates, input.asOf, horizonDays, category.plannedGrowthPct, item.sku);
     const rawResult = forecast(raw, dates, input.asOf, horizonDays, category.plannedGrowthPct, item.sku);

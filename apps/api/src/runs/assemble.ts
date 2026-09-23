@@ -44,6 +44,10 @@ export function assembleDraft(input: {
     }
   }
   const [openai, gpu] = ai.runtimes;
+  if ((openai?.status === 'success') !== (ai.decision !== null) ||
+      (gpu?.status === 'success' && calculation.candidates.length === 0)) {
+    throw new Error('AI runtime status is inconsistent with its decision or candidates');
+  }
   const warnings = uniqueWarnings([
     ...calculation.warnings,
     ...ai.warnings,

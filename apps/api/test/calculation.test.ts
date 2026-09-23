@@ -108,6 +108,16 @@ test('same-customer/day spike is hard-excluded and recurrent event needs guarded
   assert.ok(retained.lines[0]!.recommendedQty > provisional.lines[0]!.recommendedQty);
 });
 
+test('rolling median and MAD match a varied 90-day history', () => {
+  const input = fixture({daily: (_date, index) => index % 5 + 1,
+    extraSales: [{id: 'varied_spike', date: '2025-12-20', sku: 'SKU', warehouseId: 'WH',
+      quantity: 100, customerToken: 'anon_cccccccccccccccc', unitPrice: 1}]});
+  const candidate = inspectDemand(scope(input)).inspection.candidates.find(item => item.quantity === 100);
+  assert.equal(candidate?.priorObservationCount, 90);
+  assert.equal(candidate?.medianQuantity, 3);
+  assert.equal(candidate?.madQuantity, 1);
+});
+
 test('critical missing stock and candidate overflow fail explicitly', () => {
   const noStock = fixture(); noStock.stock = [];
   assert.throws(() => calculate(noStock), (error: unknown) => error instanceof CalculationError && error.code === 'DATA_GAP');
@@ -139,4 +149,24 @@ test('run-scoped DB tool factory reads the immutable snapshot and caches its cal
   assert.equal(lookupCalculation('other_calculation'), null);
   const again = await tools.calculate({specialist: null}, {signal});
   assert.deepEqual(again, calculated);
+});
+
+test('near-limit sales and stockout intervals finish within the tool budget', () => {
+  const extraSales: DatasetInput['sales'] = [];
+  for (let index = 0; index < 19_000; index++) {
+    const date = new Date(Date.parse('2025-01-01T00:00:00Z') + Math.floor(index / 60) * dayMs).toISOString().slice(0, 10);
+    extraSales.push({id: `dense_${index}`, date, sku: 'SKU', warehouseId: 'WH', quantity: 10,
+      customerToken: `anon_${(index + 50_000).toString(16).padStart(16, '0')}`, unitPrice: 1});
+  }
+  const input = fixture({extraSales, daily: date => date >= '2025-12-01' ? 0 : 10,
+    stockouts: Array.from({length: 1_000}, () =>
+    ({sku: 'SKU', warehouseId: 'WH', start: '2025-12-01', end: '2025-12-31'}))});
+  const started = performance.now();
+  const selected = scope(input);
+  const inspected = inspectDemand(selected);
+  const calculated = calculateDemand(selected, inspected, null);
+  const elapsedMs = performance.now() - started;
+  assert.equal(inspected.inspection.candidateCount, 0);
+  assert.ok(calculated.lines[0]!.metrics.lostDemandUnits > 0);
+  assert.ok(elapsedMs < 15_000, `Max-input calculation took ${Math.round(elapsedMs)} ms`);
 });
