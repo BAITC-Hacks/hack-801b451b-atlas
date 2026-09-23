@@ -1,6 +1,6 @@
-# Non-GPU application gate — 2026-09-23
+# Historical local degraded-mode application gate — 2026-09-23
 
-This records an executed local product flow. It does **not** close the Brev GPU or combined-runtime gate.
+This records the earlier local product flow while the GPU runtime was unavailable. The later same-run OpenAI+Brev GPU verification closed the combined gate; see [combined verification](combined.md). This record remains useful as proof that the application preserves its honest degraded path.
 
 ## Environment and commands
 
@@ -24,8 +24,7 @@ The page edited one final quantity while retaining the recommendation, creating 
 
 The original frontend had a browser-only `fetch` binding defect: the page sent no dataset request even though a direct web-proxy health check returned 200. `Transport` now invokes `globalThis.fetch` with the correct receiver. The same local browser test then loaded the dataset and passed the complete flow.
 
-## Open gates
+## State at the time of this run
 
-- No Brev GPU container or inference has executed. Two approved Brev UI deployments timed out. A later CLI Nebius L40S request failed with provider VPC quota exhaustion; a GCP L4 instance reached Running with a $0.87/hour displayed rate for the final GPU phase. See [deployment record](../../infra/brev/deployment.md). GPU hardware and image/model pins are configuration, not execution evidence.
-- G-COMBINED still needs same-run Brev GPU computation, inference-correlated CUDA telemetry, material event-action or review impact, UI visibility and approval/export with current evidence.
+- At the time of this local-only run, no Brev GPU container or inference had executed. Later provisioning and combined-runtime evidence are recorded in [deployment record](../../infra/brev/deployment.md) and [combined verification](combined.md).
 - The proposed CSV mapping has no accepted partner/1C sample. It must not be described as verified 1C compatibility.

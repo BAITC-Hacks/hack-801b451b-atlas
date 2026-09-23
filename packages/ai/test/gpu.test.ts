@@ -37,7 +37,11 @@ test('G01 uses fixed numeric rubric and returns validated report with observed e
   assert.equal(body.max_tokens, 4096);
   assert.equal(body.stream, false);
   assert.deepEqual(JSON.parse(body.messages[1].content), { candidates: [candidate] });
-  assert.equal('response_format' in body, false);
+  assert.equal(body.response_format.type, 'json_object');
+  assert.deepEqual(body.response_format.schema.properties.decisions.items.properties.eventId.enum, [candidate.eventId]);
+  assert.deepEqual(body.response_format.schema.properties.decisions.items.properties.label.enum, ['one_off', 'recurring', 'uncertain']);
+  assert.equal(body.response_format.schema.properties.decisions.minItems, 1);
+  assert.equal(body.response_format.schema.properties.decisions.items.properties.evidenceCodes.maxItems, 0);
 });
 
 test('missing or mismatched GPU proof fails closed before network', async () => {

@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { chromium } from 'playwright-core';
 
 const baseUrl = process.env.ATLAS_BASE_URL ?? 'http://localhost:3000';
+const expectedGpu = process.env.ATLAS_EXPECT_GPU ?? 'failed';
+assert.ok(['failed', 'success'].includes(expectedGpu));
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.ATLAS_CHROME_PATH
@@ -32,10 +34,18 @@ try {
   const { run: draft } = await createdResponse.json();
   assert.equal(draft.status, 'draft');
   assert.equal(draft.revision, 1);
-  assert.equal(draft.mode, 'degraded');
+  assert.equal(draft.mode, expectedGpu === 'success' ? 'live' : 'degraded');
   assert.equal(draft.ai.runtimes[0].status, 'success');
-  assert.equal(draft.ai.runtimes[1].status, 'failed');
-  assert.equal(draft.ai.specialist, null);
+  assert.equal(draft.ai.runtimes[1].status, expectedGpu);
+  if (expectedGpu === 'success') {
+    assert.ok(draft.ai.specialist?.decisions.length > 0);
+    assert.ok(draft.ai.gpuEvidence?.inferenceResponseId);
+    assert.ok(draft.ai.eventActions.some(action => action.source === 'brev_gpu'));
+    assert.ok(draft.ai.eventActions.some(action => action.source === 'brev_gpu' && action.action !== 'exclude_pending_review'), 'GPU classification must change a guarded event action');
+  } else {
+    assert.equal(draft.ai.specialist, null);
+    assert.equal(draft.ai.gpuEvidence, null);
+  }
   assert.equal(draft.lines.length, 6);
   assert.deepEqual(draft.ai.trace.filter(event => event.kind === 'tool').map(event => event.name),
     ['inspectDemand', 'classifyEvents', 'calculateOrders']);
@@ -62,7 +72,8 @@ try {
   assert.equal(stale.status(), 409);
   assert.equal((await stale.json()).error.code, 'REVISION_CONFLICT');
 
-  await page.getByRole('checkbox', { name: /Я проверил предупреждения/ }).check();
+  const warningCheckbox = page.getByRole('checkbox', { name: /Я проверил предупреждения/ });
+  if (await warningCheckbox.count()) await warningCheckbox.check();
   await page.getByRole('checkbox', { name: /Подтвердите текущую редакцию заказа/ }).check();
   const [approvedResponse] = await Promise.all([
     page.waitForResponse(response => response.url() === `${baseUrl}/api/v1/runs/${draft.id}/approve` && response.request().method() === 'POST'),
@@ -88,7 +99,7 @@ try {
 
   await page.reload();
   await page.getByText('Order approved', { exact: true }).first().waitFor();
-  await page.getByText('Approved after warning review').waitFor();
+  if (expectedGpu === 'failed') await page.getByText('Approved after warning review').waitFor();
   assert.match(await page.locator('main').innerText(), /Revision: 3/);
   assert.equal(runPosts, 1);
   const persisted = await page.request.get(`${baseUrl}/api/v1/runs/${draft.id}`);

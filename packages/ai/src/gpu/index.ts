@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import {
-  CandidatesSchema, GpuEvidenceSchema, validateSpecialistReport,
+  CandidatesSchema, GpuEvidenceSchema, SpecialistDecisionSchema, validateSpecialistReport,
   type Candidate, type GpuCallOutcome,
 } from '@atlas/contracts';
 import { loadAiConfig, type GpuConfig } from '../config.js';
@@ -21,7 +21,25 @@ const deploymentSchema = GpuEvidenceSchema.omit({
 });
 
 /** Fixed numeric case rubric. Labels are model output, then checked against the candidate set. */
-export const fixedRubric = `Classify each sales-event candidate using only its numeric fields. Return JSON only: {"decisions":[{"eventId":"...","label":"one_off|recurring|uncertain","confidence":0.0,"evidenceCodes":[]}]}. Return exactly one decision per event. Use evidence codes only when justified: EXTREME_SIZE if quantity > max(6*medianQuantity,medianQuantity+6*madQuantity); LOW_RECURRENCE if recurrenceCount < 3; REPEATED_PURCHASES if recurrenceCount >= 3; CUSTOMER_CONCENTRATION if customerShare90d >= 0.5; LIMITED_HISTORY if priorObservationCount < 8. Repeated purchases support recurring; a single extreme event with low recurrence supports one_off; mixed or sparse evidence supports uncertain. HardOneOff events remain governed by the backend hard rule. Confidence is a heuristic, not calibrated probability. Do not generate quantities, prose, hardware details or extra keys.`;
+export const fixedRubric = `You classify sales-event candidates from their numeric fields. Return one JSON object with a decisions array and no Markdown or prose. Copy each input eventId exactly once. Each decision has eventId, label, confidence, and evidenceCodes. The label is exactly one of "one_off", "recurring", or "uncertain". Set evidenceCodes to [] for every decision. Classify each candidate independently. Apply repeated-purchase evidence first: recurrenceCount >= 3 supports recurring even when one sale is large; use confidence >= 0.8 when the repeat signal is clear. Otherwise, quantity > max(6*medianQuantity, medianQuantity+6*madQuantity) with recurrenceCount < 3 supports one_off; use confidence >= 0.8 when the extreme signal is clear. Mixed or sparse evidence supports uncertain with confidence < 0.8. Confidence is a heuristic, not calibrated probability. HardOneOff events are governed by the backend hard rule. Do not invent quantities or extra fields.`;
+
+function responseSchema(candidates: Candidate[]) {
+  return {
+    type: 'object', additionalProperties: false, required: ['decisions'],
+    properties: {decisions: {
+      type: 'array', minItems: candidates.length, maxItems: candidates.length,
+      items: {type: 'object', additionalProperties: false,
+        required: ['eventId', 'label', 'confidence', 'evidenceCodes'],
+        properties: {
+          eventId: {type: 'string', enum: candidates.map(candidate => candidate.eventId)},
+          label: {type: 'string', enum: SpecialistDecisionSchema.shape.label.options},
+          confidence: {type: 'number', minimum: 0, maximum: 1},
+          evidenceCodes: {type: 'array', maxItems: 0, items: {type: 'string'}},
+        },
+      },
+    }},
+  };
+}
 
 type Code = Extract<GpuCallOutcome, { ok: false }>['error']['code'];
 class GpuFailure extends Error {
@@ -130,6 +148,7 @@ export async function classifyOnGpu(
       model: config.modelId,
       messages: [{ role: 'system', content: fixedRubric }, { role: 'user', content: JSON.stringify({ candidates }) }],
       temperature: 0, max_tokens: 4096, stream: false,
+      response_format: {type: 'json_object', schema: responseSchema(candidates)},
     };
     if (encoder.encode(JSON.stringify(payload)).length > MAX_BODY_BYTES) throw new GpuFailure('INVALID_OUTPUT');
     for (let attempt = 1; attempt <= 2; attempt++) {

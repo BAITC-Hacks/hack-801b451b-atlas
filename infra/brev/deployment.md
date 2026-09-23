@@ -1,7 +1,33 @@
 # Brev deployment record
 
-Status: **GCP L4 instance running; GPU inference not yet verified**. The signed-in account showed a $50.00 credit balance and no instance usage on 2026-09-23. A stop/start capable Crusoe L40S (48 GiB VRAM, 8 CPUs, 147 GiB RAM) with 100 GiB storage was quoted in the Brev UI at $1.74/hour compute plus $0.01/hour storage, $1.75/hour running and $0.01/hour stopped. The user approved Deploy, which was clicked once. Brev reported that the provider took longer than expected and the instance was likely created. More than ten minutes later, the environment list and instance usage were still empty with the full balance shown. The user then approved an alternate AWS L40S g6e.xlarge (48 GiB VRAM, 4 CPUs, 32 GiB RAM) with 100 GiB storage at $2.23/hour compute plus $0.02/hour storage, $2.25/hour running and $0.02/hour stopped. Deploy was clicked once for `atlas-hackalem-aws`; Brev returned the same provider timeout. A fresh Brev CLI token authenticated successfully on 2026-09-23 and `brev ls` returned `No instances in org ivanzolotov132-760206-a0tr`. A later CLI Nebius L40S request produced instance `lirwuc84c` but failed with provider `ResourceExhausted` for `vpc.pool.count`, with $0/hour displayed. A GCP L4 request produced instance `iyfz2jzfd` (`atlas-hackalem-gcp`), which reached Running on 2026-09-23 with NVIDIA L4 24 GiB, 129 GB disk, a $0.87/hour displayed rate and a $49.98 remaining account balance. No GPU container, model inference or compute proof has yet been observed. Stop the running instance after testing and verify billing status. The user asked us not to contact Brev support.
+Status: **GPU runtime and combined application gate verified** on 2026-09-23. The deployed instance is Brev GCP NVIDIA L4 `iyfz2jzfd` (`atlas-hackalem-gcp`), 24 GiB VRAM and 129 GB disk, at a displayed $0.87/hour running rate. The full Brev Compose stack (database, API, web and private GPU specialist) built and became healthy; migrations and deterministic synthetic seed completed. The successful combined workflow and its actual event-decision effect are recorded in [combined verification](../../docs/review/combined.md).
 
-The 10-minute NIM feasibility window ended without an accessible small instruction NIM image/model/profile or an NGC deployment credential being established. The selected fallback uses the official `ghcr.io/ggml-org/llama.cpp` CUDA server image manifest digest `sha256:2e323f437c6169a94f9edf5f8b8cf2fca8c70104e4196effa3a3d58f03eefb40` (observed for `server-cuda-b9787`) and `Qwen/Qwen2.5-1.5B-Instruct-GGUF` revision `91cad51170dc346986eccefdc2dd33a9da36ead9`, file `qwen2.5-1.5b-instruct-q4_k_m.gguf`, SHA-256 `6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e` from the model host's linked ETag. Image GPU compatibility and downloaded file checksum must be verified on the instance. No GPU inference claim follows from these pins.
+## Runtime pins and evidence
 
-Deployment operator must record instance ID, actual image platform digest, model SHA-256, GPU identity, offload log, correlated compute telemetry and request ID under ignored `infra/brev/evidence/` using `verify-deployment.sh`; only then may the adapter accept a current verification record. Stop the actual instance in Brev after the demo and check billing status. Container shutdown alone does not stop compute charges.
+- CUDA service image: `ghcr.io/ggml-org/llama.cpp` manifest digest `sha256:2e323f437c6169a94f9edf5f8b8cf2fca8c70104e4196effa3a3d58f03eefb40` (`server-cuda-b9787`).
+- Model: `Qwen/Qwen2.5-1.5B-Instruct-GGUF`, revision `91cad51170dc346986eccefdc2dd33a9da36ead9`, file SHA-256 `6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e`.
+- Startup logs reported 29/29 layers offloaded to GPU and a 934.70 MiB CUDA model buffer. The deployment verifier passed at `2026-09-23T11:03:49.710Z` and captured four inference-correlated `nvidia-smi pmon` samples, peak SM utilization 18%, and specialist smoke response ID `chatcmpl-PydidE4B3Msc7M4paXIHtmMAi6EretAx`.
+- Ignored evidence record: `infra/brev/evidence/verification-ba8c3ebf-1bde-4e0f-af73-dfa304d6b5ca.json`. It is local-only and not committed. Regenerate it after any restart, image/model change, or runtime change; prior verification must not be treated as current after that point.
+- The same-run browser E2E run was `a162030e-9c3b-459c-b106-632881838e4d`. It recorded successful OpenAI and GPU calls; GPU response ID `chatcmpl-pxfBCMQsOdBq0ain1NYUxjDc4Hr4DvuP` matched the deployment. Full details and impact comparison are in the [combined record](../../docs/review/combined.md).
+
+The application services remained private. Access used SSH loopback forwarding to `127.0.0.1:3002`; `WEB_ORIGIN` matched that origin. No internal service port was exposed publicly. Keep provider credentials and deployment secrets in ignored local environment files or provider secret fields only.
+
+## Reproduction and shutdown
+
+With the verified deployment running, tunnel the web origin to local port 3002, then run from the repository root:
+
+```powershell
+$env:ATLAS_BASE_URL = 'http://127.0.0.1:3002'
+$env:ATLAS_EXPECT_GPU = 'success'
+pnpm --filter @atlas/web e2e:local
+```
+
+The GPU test requires the running Brev Compose deployment, migrated/seeded database, configured server-side OpenAI credentials and a current verification record. Use `infra/brev/verify-deployment.sh` to produce fresh deployment evidence before treating GPU status as verified. A configured URL, healthy container, model load, GPU presence or HTTP success alone is not proof of inference on GPU.
+
+After GPU work, stop the instance in Brev and confirm billing has stopped. Container shutdown alone leaves compute charges active. The recorded running rate was $0.87/hour.
+
+## Provisioning history
+
+The first approved Crusoe L40S and alternate AWS L40S UI deployments returned provider timeouts; no instances appeared from those attempts. A CLI Nebius L40S request returned instance `lirwuc84c` but failed with provider VPC quota exhaustion (`vpc.pool.count`). The GCP L4 request created `iyfz2jzfd`, which became the verified running instance described above. No support contact was made.
+
+The 10-minute NVIDIA NIM fit/access check did not establish a usable small instruction NIM profile or deployment credential, so the pinned llama.cpp CUDA/Qwen runtime above was used. No NGC key or hosted NVIDIA inference entitlement is assumed.

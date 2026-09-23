@@ -4,9 +4,9 @@ Atlas is a local, bilingual workbench for preparing and reviewing supplier reple
 
 ## Current status
 
-The non-GPU workflow is implemented and has passed a production-built local UI end-to-end run against the API and PostgreSQL. Run `00ebdb0c-9f42-4232-955e-111b0c9ea974` used a real OpenAI GPT-4.1 call and real backend tools; OpenAI succeeded and the Brev GPU runtime truthfully failed as unavailable. The browser run displayed six order lines, edited a line, rejected a stale revision with HTTP 409, acknowledged warnings, approved revision 3, downloaded CSV, then reloaded the same approved revision from the database. This verifies the local degraded workflow; it is not proof of GPU inference.
+The complete workflow has passed a production-built browser end-to-end run against PostgreSQL and a live Brev NVIDIA L4 GPU. Run `a162030e-9c3b-459c-b106-632881838e4d` used OpenAI GPT-4.1, real backend tools, and same-run Qwen GPU inference; the verified GPU specialist materially changed the event decisions and excluded-unit total. The browser edited a six-line draft, rejected a stale revision with HTTP 409, acknowledged warnings when required, approved revision 3, downloaded CSV, and reloaded the same approved revision from the database. See the [combined GPU verification record](docs/review/combined.md) and [historical local degraded-mode record](docs/review/application.md).
 
-The complete local checks recorded for this repository passed: frozen-lockfile install, recursive typecheck, recursive build, and package tests. The UI flow was exercised with `pnpm --filter @atlas/web e2e:local` using local Chrome. A clean API/web restart and rerun are recorded in the [non-GPU application verification](docs/review/application.md), which also lists package-level test counts and the remaining gates. Build and test commands are listed below.
+Frozen-lockfile install, recursive typecheck/build and package tests passed; the combined GPU browser flow also passed with the API, web, database and specialist in the Brev Compose deployment. The local degraded-mode checks and package-level counts are recorded in the [historical application verification](docs/review/application.md); the live combined gate and reproduction details are in the [combined GPU verification](docs/review/combined.md).
 
 ## What the workflow does
 
@@ -70,9 +70,9 @@ The browser test requires the running Compose stack, seeded data, a valid OpenAI
 
 ## Runtime and deployment status
 
-OpenAI GPT-4.1 is the primary agent/control plane and was exercised successfully in the recorded local end-to-end run. GPU inference is not yet available or verified. Two Brev UI deployment attempts returned provider timeouts, a later Nebius request failed on provider VPC quota, and a GCP L4 instance is running for the final GPU phase. The application therefore reports a failed Brev GPU runtime, uses deterministic provisional handling for candidate events, and requires the manager to acknowledge warnings before approval. It does not claim or simulate GPU success. Brev deployment details and the evidence requirements for a GPU run are in [infra/brev/deployment.md](infra/brev/deployment.md).
+OpenAI GPT-4.1 is the primary agent/control plane. Brev GPU inference has been verified on the running GCP L4 for the recorded combined run. The deployment history, current instance/runtime details, evidence requirements and stop-billing reminder are in [infra/brev/deployment.md](infra/brev/deployment.md).
 
-The private GPU adapter boundary remains in `packages/ai`; when an appropriately provisioned and verified Brev GPU service becomes available, it can be configured through the existing Compose overlay and `.env` settings. The Brev GPU gate and G-COMBINED remain open: no GPU inference, GPU evidence, or dual-runtime end-to-end gate has passed. See the [executed application gate and open-gate record](docs/review/application.md).
+The private GPU adapter boundary remains in `packages/ai`, configured through the existing Compose overlay and server-side `.env` settings. The recorded same-run proof covers GPU inference, correlated compute evidence, material event-decision impact, UI review, approval and export. Evidence is tied to the running deployment and must be regenerated after a runtime restart or change. The supplied partner/1C sample remains unverified.
 
 ## Data and limitations
 
@@ -80,13 +80,13 @@ The private GPU adapter boundary remains in `packages/ai`; when an appropriately
 - The partner has not supplied a V2 sample or confirmed an accounting/1C exchange schema. The app accepts its documented normalized JSON shape; compatibility with the partner's actual files is unverified. Customer values must be anonymized before import.
 - Forecasting uses the documented `replenishment-v1` heuristic. It is explainable and deterministic, but is not calibrated against partner history and does not claim forecast accuracy.
 - Identity is local single-operator demo identity, without production authentication or roles. Supplier messaging and automatic sending are not implemented.
-- GPU functionality is currently unavailable as described above; the local OpenAI and deterministic degraded path remains usable.
+- The tested live run used a Brev GCP NVIDIA L4 GPU as described above. If GPU verification is unavailable or expires, the application retains its truthful degraded path; it does not represent CPU output as GPU inference.
 
 See the [official case and checklist](docs/case.md), [product specification and calculation method](docs/product-spec.md), [HTTP contract](docs/api.md), [AI/tool contract](docs/ai-contract.md), and [Brev deployment record](infra/brev/deployment.md).
 
 ## Disclosures
 
 - The generic planning baseline was adapted from `hackalem-v4/templates/AGENTS-TEMPLATE.md` and `hackalem-v4/MODEL-POLICY.md` in the user's downloaded hackathon pack. Those materials are planning inputs, not application functionality. The supplied official `CASE-INPUT.md` is preserved in [docs/case.md](docs/case.md). No external partner connection or partner dataset is represented here.
-- Runtime agent use: OpenAI Agents SDK with the OpenAI GPT-4.1 model, called server-side through the configured OpenAI API. The Brev llama.cpp/Qwen configuration is deployment preparation only; it has not been deployed or run on a GPU.
+- Runtime agent use: OpenAI Agents SDK with OpenAI model snapshot `gpt-4.1-2025-04-14`, called server-side through the configured API. The verified Brev specialist uses the pinned llama.cpp CUDA image and Qwen2.5-1.5B-Instruct-GGUF model recorded in the deployment evidence. The model identity and actual GPU run are documented in the combined verification record.
 - Application dependencies and their exact pinned versions are listed in the root and workspace `package.json` files and `pnpm-lock.yaml`. The application uses Next.js, React, Fastify, Zod, Drizzle ORM, PostgreSQL, and OpenAI libraries. Consult the corresponding upstream project and model licenses before redistributing those components.
-- External technical references used while preparing the implementation include the [OpenAI Agents SDK documentation](https://developers.openai.com/api/docs/guides/agents/sdk), [Brev custom container documentation](https://docs.nvidia.com/brev/guides/development-tools/custom-containers), [llama.cpp Docker documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/docker.md), and the [Qwen fallback model card](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF). The Qwen model was not used to produce the recorded demo.
+- External technical references used while preparing the implementation include the [OpenAI Agents SDK documentation](https://developers.openai.com/api/docs/guides/agents/sdk), [Brev custom container documentation](https://docs.nvidia.com/brev/guides/development-tools/custom-containers), [llama.cpp Docker documentation](https://github.com/ggml-org/llama.cpp/blob/master/docs/docker.md), and the [Qwen model card](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF).

@@ -17,6 +17,8 @@ services:
       - "8192"
       - --parallel
       - "1"
+      - -lv
+      - "4"
     volumes:
       - ./infra/brev/model-cache:/models:ro
     deploy:
@@ -30,6 +32,7 @@ services:
   gpu-probe:
     image: curlimages/curl@sha256:935d9100e9ba842cdb060de42472c7ca90cfe9a7c96e4dacb55e79e560b3ff40
     profiles: [tools]
+    user: "0:0"
     entrypoint: [curl]
     volumes:
       - ./infra/brev/evidence:/probe
